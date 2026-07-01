@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { PostCard } from '@/components/features/PostCard';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import * as federation from '@/api/federation';
 
 export default function SearchPage() {
   const [searchParams] = useSearchParams();
@@ -54,28 +55,44 @@ export default function SearchPage() {
       if (searchQuery.includes('@')) {
         setFediverseLoading(true);
         const cleaned = searchQuery.replace(/^@/, '');
-        const { data: remoteData } = await supabase
-          .from('remote_accounts')
-          .select('*')
-          .or(`username.ilike.%${cleaned}%,domain.ilike.%${cleaned}%`)
-          .limit(20);
-        setFediverseResults(remoteData || []);
-        setFediverseLoading(false);
 
-        // Live lookup if proper handle format
+        // Local cache lookup (optional)
+        try {
+          const { data: remoteData } = await supabase
+            .from('remote_accounts')
+            .select('*')
+            .or(`username.ilike.%${cleaned}%,domain.ilike.%${cleaned}%`)
+            .limit(20);
+          setFediverseResults(remoteData || []);
+        } catch (e) {
+          setFediverseResults([]);
+        }
+
+        // Live lookup against TestagramGateway (preferred)
         if (cleaned.includes('@')) {
           try {
-            const { data } = await supabase.functions.invoke('activitypub-federation', {
-              body: { action: 'lookup_account', handle: cleaned },
-            });
-            if (data?.account) {
-              setFediverseResults(prev => {
-                const exists = prev.some(r => r.actor_url === data.account.actor_url);
-                return exists ? prev : [data.account, ...prev];
+            const actor = await federation.getUser(cleaned);
+            if (actor) {
+              const account = {
+                actor_url: actor.id || actor.actor_url || cleaned,
+                username: actor.preferredUsername || cleaned.split('@')[0],
+                domain: cleaned.split('@')[1] || '',
+                display_name: actor.name || actor.preferredUsername,
+                bio: actor.summary,
+                avatar_url: actor.icon?.url || actor.avatar_url,
+                raw_actor: actor,
+              };
+              setFediverseResults((prev) => {
+                const exists = prev.some((r) => r.actor_url === account.actor_url);
+                return exists ? prev : [account, ...prev];
               });
             }
-          } catch {}
+          } catch (err) {
+            // ignore — gateway may not know the account
+          }
         }
+
+        setFediverseLoading(false);
       } else {
         setFediverseResults([]);
       }
@@ -96,11 +113,12 @@ export default function SearchPage() {
   const handleFediverseFollow = async (account: any) => {
     if (!user) { navigate('/auth'); return; }
     try {
-      await supabase.functions.invoke('activitypub-federation', {
-        body: { action: 'follow_remote', local_user_id: user.id, remote_actor_url: account.actor_url },
-      });
+      // Prefer acct/actor_url for gateway follow
+      const target = account.actor_url || `${account.username}@${account.domain}`;
+      await federation.follow(target);
       toast.success(`Follow request sent to @${account.username}@${account.domain}`);
-    } catch {
+    } catch (err) {
+      console.error('follow failed', err);
       toast.error('Follow failed');
     }
   };
