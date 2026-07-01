@@ -1,0 +1,51 @@
+{
+  "rewrites": [
+    {
+      "source": "/.well-known/webfinger",
+      "destination": "https://lrqqpudyrkmitbeilrqq.backend.onspace.ai/functions/v1/activitypub-webfinger"
+    },
+    {
+      "source": "/users/:username",
+      "destination": "https://lrqqpudyrkmitbeilrqq.backend.onspace.ai/functions/v1/activitypub-actor?username=:username"
+    },
+    {
+      "source": "/inbox",
+      "destination": "https://lrqqpudyrkmitbeilrqq.backend.onspace.ai/functions/v1/activitypub-inbox"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
+        { "key": "X-XSS-Protection", "value": "1; mode=block" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    },
+    {
+      "source": "/.well-known/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Content-Type", "value": "application/jrd+json" }
+      ]
+    },
+    {
+      "source": "/users/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Content-Type", "value": "application/activity+json" }
+      ]
+    },
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}
